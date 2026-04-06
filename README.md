@@ -1,3 +1,12 @@
+---
+title: MetaGuard Pro
+emoji: 🛡️
+colorFrom: red
+colorTo: blue
+sdk: docker
+app_port: 7860
+---
+
 # MetaGuard Pro v3.5 - Adversarial Safety Sandbox for Llama Guard 4
 
 The definitive adversarial safety benchmark for Meta's 2026 safety research.

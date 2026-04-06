@@ -9,6 +9,8 @@ COPY environment.py .
 COPY openenv.yaml .
 COPY inference.py .
 
-EXPOSE 8003
+ENV PYTHONUNBUFFERED=1
 
-CMD ["python3", "environment.py"]
+EXPOSE 7860
+
+CMD ["python3", "-u", "environment.py", "--port", "7860"]

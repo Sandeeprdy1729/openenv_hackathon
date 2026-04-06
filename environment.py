@@ -1637,4 +1637,9 @@ async def call_tool(request: Dict[str, Any]):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8003)
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--port", type=int, default=8003)
+    args = parser.parse_args()
+    uvicorn.run(app, host="0.0.0.0", port=args.port)
