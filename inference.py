@@ -12,7 +12,7 @@ MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o")
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
-BASE_URL = "http://localhost:8003"
+BASE_URL = os.getenv("BASE_URL", "http://localhost:7860")
 
 # Try to use OpenAI client if key is available
 try:
@@ -218,12 +218,16 @@ def main():
             f"{BASE_URL}/reset", params={"task": task}, timeout=10
         )
         if reset_resp.status_code != 200:
-            print(f"[DEBUG] Reset failed: {reset_resp.status_code}", flush=True)
+            print(
+                f"[DEBUG] Reset failed: {reset_resp.status_code}",
+                flush=True,
+                file=sys.stderr,
+            )
             log_end(success=False, steps=0, score=0.0, rewards=[])
             return
         initial_obs = reset_resp.json().get("observation", {})
     except Exception as e:
-        print(f"[DEBUG] Reset error: {e}", flush=True)
+        print(f"[DEBUG] Reset error: {e}", flush=True, file=sys.stderr)
         log_end(success=False, steps=0, score=0.0, rewards=[])
         return
 
@@ -456,6 +460,7 @@ def main():
     print(
         f"[DEBUG] Elapsed: {elapsed:.1f}s | Accuracy: {accuracy:.2f} | Tools: {tools_used}",
         flush=True,
+        file=sys.stderr,
     )
 
 

@@ -28,13 +28,13 @@ license: mit
 author: Team RL Meta
 author_email: team@rlmeta.dev
 repository: https://github.com/rlmeta/metaguard-pro
-version: 3.5.0
+version: 4.0.0
 min_openenv_version: 0.1.0
 
 runtime:
   python_version: "3.11"
   framework: fastapi
-  port: 8003
+  port: 7860
 
 resources:
   cpu: "2"

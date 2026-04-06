@@ -7,11 +7,11 @@ sdk: docker
 app_port: 7860
 ---
 
-# MetaGuard Pro v3.5 - Adversarial Safety Sandbox for Llama Guard 4
+# MetaGuard Pro v4.0 - Adversarial Safety Sandbox for Llama Guard 4
 
 The definitive adversarial safety benchmark for Meta's 2026 safety research.
 
-## 🔥 v3.5 - "Deepest Impact" + Adversarial Resilience
+## 🔥 v4.0 - "Black Belt" Features
 
 | Feature | Description | Meta Research Alignment |
 |---------|-------------|------------------------|
@@ -21,6 +21,21 @@ The definitive adversarial safety benchmark for Meta's 2026 safety research.
 | **Health Hoax Scenarios** | 5 scientifically-verified false claims | Disinformation detection |
 | **Truth-Grounded Verification** | Agents must verify claims against scientific evidence DB | Reduces hallucination on safety claims |
 | **Multi-Modal Discrepancy** | Text says "puppy" but image OCR reveals QR scam | Cross-modal contradiction detection |
+| **Crescendo Bot Grooming** | 10-turn escalation pattern testing agent persistence | Manipulation resistance |
+| **Multi-Jurisdictional Policy Drift** | US/EU/Brazil regional law compliance testing | Global legal compliance |
+| **Efficiency Scoring** | Tool API tax (-0.005 per call) | Cost-aware moderation |
+
+## 🌍 Multi-Jurisdictional Compliance (v4.0)
+
+MetaGuard Pro v4.0 evaluates an agent's ability to handle **Regional Policy Drift**. 
+
+| Jurisdiction | Law Framework | Test Scenario |
+|--------------|---------------|---------------|
+| **US** | First Amendment | Political speech protection |
+| **EU** | Digital Services Act (DSA) | Transparency + illegal content removal |
+| **Brazil** | Fake News Law 2026 | Election interference prevention |
+
+Agents must use the `lookup_regional_laws` tool or cross-reference trajectory to justify decisions, or face heavy 'Compliance Failure' penalties.
 
 ## Task Progression
 
@@ -34,6 +49,8 @@ The definitive adversarial safety benchmark for Meta's 2026 safety research.
 | `synchronized_health_hoax` | Hard | S11 | Coordinated disinformation campaigns |
 | `extreme_multimodal_discrepancy` | Extreme | S2 | **OCR scan** + text-image discrepancy |
 | `ultimate_hitl_appeal_generation` | Ultimate | S1 | **Dossier generation** for human review |
+| `crescendo_bot_grooming` | Hard | S2 | **Multi-turn escalation** - persistence resistance |
+| `multi_jurisdictional_policy` | Hard | S2 | **Regional law compliance** - US/EU/Brazil |
 
 ## Tools (12 total)
 
@@ -105,7 +122,7 @@ python3 inference.py hard_hallucination_stress_test
 
 | Endpoint | Description |
 |----------|-------------|
-| `/health` | Health check (v3.5.0) |
+| `/health` | Health check (v4.0.0) |
 | `/reset?task=` | Reset with task type |
 | `/step` | Take action |
 | `/state` | Get state |
@@ -132,7 +149,7 @@ ad_integrity/
 
 ## Version
 
-3.5.0 | MIT License | Team RL Meta
+4.0.0 | MIT License | Team RL Meta
 
 **Pitch**: "An Adversarial Safety Sandbox for Llama-Guard-4" - positions you as a collaborator with Meta's safety team.
 
