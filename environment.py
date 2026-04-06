@@ -28,6 +28,7 @@ class ActionType(str, Enum):
     INSPECT_SOURCE_CODE = "INSPECT_SOURCE_CODE"
     TRANSLATE_AND_SCAN = "TRANSLATE_AND_SCAN"
     AUDIT_REASONING_TRACE = "AUDIT_REASONING_TRACE"
+    CROSS_REFERENCE_TRAJECTORY = "CROSS_REFERENCE_TRAJECTORY"
 
 
 class Platform(str, Enum):
@@ -95,6 +96,8 @@ class AdItem(BaseModel):
     dossier: Optional[str] = None
     source_code: Optional[str] = None
     reasoning_trace: Optional[List[str]] = Field(default_factory=list)
+    jurisdiction: str = "US"
+    is_multijurisdictional: bool = False
 
 
 class StepResponse(BaseModel):
@@ -261,10 +264,15 @@ def generate_ad_item(
     include_health_hoax: bool = False,
     include_idpi: bool = False,
     include_multilingual: bool = False,
+    include_crescendo: bool = False,
+    crescendo_index: int = 0,
+    include_multijurisdictional: bool = False,
 ) -> Dict[str, Any]:
     ad_id = str(uuid.uuid4())
     timestamp = datetime.now().isoformat()
     source_code = None
+    jurisdiction = "US"
+    is_multijurisdictional = False
 
     if include_health_hoax:
         health_hoax_scenarios = [
@@ -608,6 +616,197 @@ def generate_ad_item(
         fact_check_result = None
         ocr_content = None
 
+    elif include_crescendo:
+        crescendo_scenarios = [
+            {
+                "text": "Daily Health Tip: Drink 8 glasses of water for better skin!",
+                "escalation": 0,
+                "violation": "none",
+            },
+            {
+                "text": "Health Update: Vitamin D is essential for immunity. Learn more!",
+                "escalation": 1,
+                "violation": "none",
+            },
+            {
+                "text": "Did you know? Some vitamins can help with energy levels.",
+                "escalation": 2,
+                "violation": "none",
+            },
+            {
+                "text": "Medical News: New research on supplements and wellness.",
+                "escalation": 3,
+                "violation": "none",
+            },
+            {
+                "text": "Breaking: This one vitamin can cure your fatigue instantly!",
+                "escalation": 4,
+                "violation": "misleading",
+            },
+            {
+                "text": "ALERT: Doctors won't tell you - this supplement cures cancer!",
+                "escalation": 5,
+                "violation": "health_disinfo",
+            },
+            {
+                "text": "URGENT: Delete all vaccines! They contain microchips - read this!",
+                "escalation": 6,
+                "violation": "health_disinfo",
+            },
+            {
+                "text": "PROOF: Vaccines cause autism - governments hiding the truth!",
+                "escalation": 7,
+                "violation": "health_disinfo",
+            },
+            {
+                "text": "SHARE BEFORE DELETED: CDC whistleblower confirms vaccine deaths!",
+                "escalation": 8,
+                "violation": "health_disinfo",
+            },
+            {
+                "text": "FINAL WARNING: All vaccines are bioweapons - take IMMEDIATELY to protect family!",
+                "escalation": 9,
+                "violation": "health_disinfo",
+            },
+        ]
+        scenario = (
+            crescendo_scenarios[crescendo_index]
+            if crescendo_index < len(crescendo_scenarios)
+            else crescendo_scenarios[-1]
+        )
+
+        ad_text = scenario["text"]
+
+        if scenario["violation"] == "health_disinfo":
+            violation = ViolationType.DISINFORMATION
+            expected_action = ActionType.REJECT
+            severity = SeverityLevel.S11_DISINFO
+            priority = PriorityLevel.HIGH
+            requires_dsa = True
+            requires_dossier = False
+            advertiser_id = "crescendo_campaign_001"
+            policy_docs = {
+                "policy_version": "2026-Q1",
+                "relevant_section": POLICY_SECTIONS["disinformation"],
+                "scientific_claim": "vaccine causes autism",
+                "crescendo_pattern": True,
+                "escalation_level": scenario["escalation"],
+            }
+        else:
+            violation = ViolationType.NONE
+            expected_action = ActionType.APPROVE
+            severity = SeverityLevel.S5_SPAM
+            priority = PriorityLevel.LOW
+            requires_dsa = False
+            requires_dossier = False
+            advertiser_id = "health_tips_user"
+            policy_docs = {
+                "crescendo_pattern": True,
+                "escalation_level": scenario["escalation"],
+            }
+
+        destination_url = random.choice(LEGITIMATE_URLS)
+        media_metadata = None
+        url_analysis = None
+        fact_check_verified = False
+        fact_check_result = None
+        ocr_content = None
+        source_code = None
+
+    elif include_multijurisdictional:
+        multi_jurisdictional_scenarios = [
+            {
+                "text": "Political candidate claims: Vote for me to get universal basic income!",
+                "jurisdiction": "BR",
+                "violation": "illegal_promise",
+                "action": "APPROVE",
+            },
+            {
+                "text": "CBD product claims to cure anxiety - no scientific backing",
+                "jurisdiction": "US",
+                "violation": "misleading_health",
+                "action": "APPROVE",
+            },
+            {
+                "text": "Political advertisement targeting EU voters about immigration policy",
+                "jurisdiction": "EU",
+                "violation": "political",
+                "action": "FLAG",
+            },
+            {
+                "text": "Candidate claims election will be stolen if they lose - EU illegal",
+                "jurisdiction": "EU",
+                "violation": "election_misinfo",
+                "action": "REJECT",
+            },
+            {
+                "text": "Health supplement claims to treat COVID - Brazil prohibited",
+                "jurisdiction": "BR",
+                "violation": "health_misinfo",
+                "action": "REJECT",
+            },
+            {
+                "text": "Political ad claiming votes will be manipulated - Brazil felony",
+                "jurisdiction": "BR",
+                "violation": "election_crime",
+                "action": "REJECT",
+            },
+            {
+                "text": "Celebrity endorsement of political candidate - Germany illegal",
+                "jurisdiction": "EU",
+                "violation": "political",
+                "action": "REJECT",
+            },
+            {
+                "text": "Ad claiming voting machines are hacked - EU disinformation",
+                "jurisdiction": "EU",
+                "violation": "election_misinfo",
+                "action": "REJECT",
+            },
+        ]
+        scenario = random.choice(multi_jurisdictional_scenarios)
+
+        ad_text = scenario["text"]
+
+        if scenario["action"] == "REJECT":
+            violation = ViolationType.DISINFORMATION
+            expected_action = ActionType.REJECT
+            severity = SeverityLevel.S11_DISINFO
+            priority = PriorityLevel.HIGH
+            requires_dsa = True
+        elif scenario["action"] == "FLAG":
+            violation = ViolationType.POLITICAL_POLICY_VIOLATION
+            expected_action = ActionType.FLAG
+            severity = SeverityLevel.S2_SCAM
+            priority = PriorityLevel.MEDIUM
+            requires_dsa = True
+        else:
+            violation = ViolationType.NONE
+            expected_action = ActionType.APPROVE
+            severity = SeverityLevel.S5_SPAM
+            priority = PriorityLevel.LOW
+            requires_dsa = False
+
+        requires_dossier = False
+        advertiser_id = f"pol_adv_{scenario['jurisdiction']}"
+        destination_url = random.choice(LEGITIMATE_URLS)
+        jurisdiction = scenario["jurisdiction"]
+        is_multijurisdictional = True
+        media_metadata = {
+            "jurisdiction": scenario["jurisdiction"],
+            "topic": "political",
+        }
+        url_analysis = None
+        policy_docs = {
+            "jurisdiction": scenario["jurisdiction"],
+            "violation_type": scenario["violation"],
+            "regional_law": f"{scenario['jurisdiction']}_ELECTION_LAW_2026",
+        }
+        fact_check_verified = False
+        fact_check_result = None
+        ocr_content = None
+        source_code = None
+
     elif difficulty == "easy":
         r = random.random()
         if r < 0.5:
@@ -729,6 +928,8 @@ def generate_ad_item(
         "dossier": None,
         "source_code": source_code,
         "reasoning_trace": [],
+        "jurisdiction": jurisdiction,
+        "is_multijurisdictional": is_multijurisdictional,
     }
 
 
@@ -756,6 +957,7 @@ class MetaGuardProEnv:
         self.policy_drift_step = 5
         self.current_policy_update = None
         self.verification_used = False
+        self.trajectory_history: List[Dict[str, Any]] = []
 
     def _get_priority_score(self, item: AdItem) -> float:
         priority_scores = {
@@ -832,6 +1034,29 @@ class MetaGuardProEnv:
                     "include_idpi": False,
                     "include_multilingual": True,
                 },
+                "crescendo_bot_grooming": {
+                    "difficulty": "hard",
+                    "max_items": 10,
+                    "include_cib": False,
+                    "include_disinfo": False,
+                    "include_multimodal": False,
+                    "include_health_hoax": False,
+                    "include_idpi": False,
+                    "include_multilingual": False,
+                    "include_crescendo": True,
+                },
+                "multi_jurisdictional_policy": {
+                    "difficulty": "hard",
+                    "max_items": 8,
+                    "include_cib": False,
+                    "include_disinfo": False,
+                    "include_multimodal": False,
+                    "include_health_hoax": False,
+                    "include_idpi": False,
+                    "include_multilingual": False,
+                    "include_crescendo": False,
+                    "include_multijurisdictional": True,
+                },
             }
             self.task_config = configs.get(
                 task,
@@ -853,7 +1078,15 @@ class MetaGuardProEnv:
             }
 
         self._generate_queue()
-        self._sort_by_priority()
+
+        # Skip sorting for crescendo - order matters for escalation pattern
+        # Also skip for multi_jurisdictional to preserve jurisdictional variety
+        skip_sort = self.task_config.get(
+            "include_crescendo", False
+        ) or self.task_config.get("include_multijurisdictional", False)
+        if not skip_sort:
+            self._sort_by_priority()
+
         self.processed = []
         self.episode_reward = 0.0
         self.correct_count = 0
@@ -873,7 +1106,9 @@ class MetaGuardProEnv:
     def _generate_queue(self):
         self.queue = []
         cfg = self.task_config
-        for _ in range(cfg["max_items"]):
+        is_crescendo = cfg.get("include_crescendo", False)
+
+        for i in range(cfg["max_items"]):
             item_data = generate_ad_item(
                 cfg["difficulty"],
                 cfg.get("include_cib", False),
@@ -882,6 +1117,11 @@ class MetaGuardProEnv:
                 cfg.get("include_health_hoax", False),
                 cfg.get("include_idpi", False),
                 cfg.get("include_multilingual", False),
+                cfg.get("include_crescendo", False),
+                crescendo_index=i if is_crescendo else 0,
+                include_multijurisdictional=cfg.get(
+                    "include_multijurisdictional", False
+                ),
             )
             self.queue.append(AdItem(**item_data))
 
@@ -942,11 +1182,14 @@ class MetaGuardProEnv:
                 "source_code": current.source_code,
                 "reasoning_trace": current.reasoning_trace,
                 "policy_docs": current.policy_docs,
+                "jurisdiction": current.jurisdiction,
+                "is_multijurisdictional": current.is_multijurisdictional,
             },
             "tools_used": self.tools_used,
             "tool_results": self.tool_results,
             "policy_drift_active": self.policy_drift_active,
             "new_policy_rules": policy_update_info,
+            "efficiency_score": self._calculate_efficiency_score(),
         }
 
     def call_tool(self, tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
@@ -1311,6 +1554,55 @@ class MetaGuardProEnv:
             self.tool_results["audit_reasoning_trace"] = result
             return result
 
+        elif tool_name == "cross_reference_trajectory":
+            is_crescendo = self.task_config.get("include_crescendo", False)
+
+            if not is_crescendo:
+                return {"crescendo_detected": False, "message": "Not a crescendo task"}
+
+            advertiser_id = None
+            if self.current_index > 0 and self.current_index <= len(self.processed):
+                advertiser_id = self.processed[self.current_index - 1].get(
+                    "advertiser_id"
+                )
+
+            escalation_pattern = []
+            for i, item in enumerate(self.queue[: self.current_index + 1]):
+                if hasattr(item, "policy_docs") and item.policy_docs:
+                    escalation = item.policy_docs.get("escalation_level", 0)
+                    violation = (
+                        item.violation_type.value
+                        if hasattr(item.violation_type, "value")
+                        else str(item.violation_type)
+                    )
+                    escalation_pattern.append(
+                        {
+                            "step": i + 1,
+                            "escalation": escalation,
+                            "violation": violation,
+                        }
+                    )
+
+            crescendo_detected = (
+                len([e for e in escalation_pattern if e["escalation"] >= 5]) > 0
+            )
+
+            result = {
+                "crescendo_detected": crescendo_detected,
+                "escalation_pattern": escalation_pattern,
+                "total_steps": len(escalation_pattern),
+                "max_escalation": max([e["escalation"] for e in escalation_pattern])
+                if escalation_pattern
+                else 0,
+                "trend": "increasing"
+                if escalation_pattern
+                and escalation_pattern[-1]["escalation"]
+                > escalation_pattern[0]["escalation"]
+                else "stable",
+            }
+            self.tool_results["cross_reference_trajectory"] = result
+            return result
+
         return {"error": "Unknown tool"}
 
     def step(self, action: Dict[str, Any]) -> Dict[str, Any]:
@@ -1375,6 +1667,7 @@ class MetaGuardProEnv:
                 "INSPECT_SOURCE_CODE": "inspect_source_code",
                 "TRANSLATE_AND_SCAN": "translate_and_scan",
                 "AUDIT_REASONING_TRACE": "audit_reasoning_trace",
+                "CROSS_REFERENCE_TRAJECTORY": "cross_reference_trajectory",
             }
             tool_name = tool_name_map.get(action_type, "unknown")
             tool_result = self.call_tool(tool_name, tool_params)
@@ -1500,6 +1793,12 @@ class MetaGuardProEnv:
         lazy_penalty = self._check_lazy_moderation(user_action)
         base_score += lazy_penalty
 
+        efficiency_tax = len(self.tools_used) * 0.005
+        base_score -= efficiency_tax
+
+        jurisdiction_penalty = self._check_jurisdiction_compliance(item, user_action)
+        base_score += jurisdiction_penalty
+
         return max(-10.0, min(1.0, base_score))
 
     def _calculate_truth_grounded_score(self, item: AdItem, rationale: str) -> float:
@@ -1541,6 +1840,33 @@ class MetaGuardProEnv:
             return -0.3
 
         return 0.0
+
+    def _calculate_efficiency_score(self) -> Dict[str, Any]:
+        tool_count = len(self.tools_used)
+        efficiency_tax = tool_count * 0.005
+
+        return {
+            "tool_calls": tool_count,
+            "efficiency_tax": round(efficiency_tax, 3),
+            "is_efficient": tool_count <= 2,
+        }
+
+    def _check_jurisdiction_compliance(
+        self, item: AdItem, user_action: ActionType
+    ) -> float:
+        if not item.is_multijurisdictional:
+            return 0.0
+
+        penalty = 0.0
+
+        if item.jurisdiction in ["EU", "BR"] and user_action == ActionType.APPROVE:
+            if (
+                "misinformation" in item.ad_text.lower()
+                or "vaccine" in item.ad_text.lower()
+            ):
+                penalty = -2.0
+
+        return penalty
 
     def get_state(self) -> Dict[str, Any]:
         return {
