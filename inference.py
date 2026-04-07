@@ -7,18 +7,18 @@ from typing import Dict, Any, List
 from datetime import datetime
 
 # Environment variables for API configuration
-API_BASE_URL = os.getenv("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME = os.getenv("MODEL_NAME", "gpt-4o")
-HF_TOKEN = os.getenv("HF_TOKEN", "")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
+MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o")
+HF_TOKEN = os.environ.get("HF_TOKEN", "")
+API_KEY = os.environ.get("API_KEY", "")
 
-BASE_URL = os.getenv("BASE_URL", "http://localhost:7860")
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:7860")
 
-# Try to use OpenAI client if key is available
+# Try to use OpenAI client
 try:
     from openai import OpenAI
 
-    HAS_OPENAI = bool(OPENAI_API_KEY)
+    HAS_OPENAI = bool(API_KEY)
 except ImportError:
     HAS_OPENAI = False
 
@@ -238,7 +238,7 @@ def main():
     client = None
     if HAS_OPENAI:
         try:
-            client = OpenAI(base_url=API_BASE_URL, api_key=OPENAI_API_KEY)
+            client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
         except Exception:
             pass
 
