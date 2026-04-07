@@ -24,23 +24,21 @@ except ImportError:
 
 
 def log_start(task: str, env: str, model: str):
-    print(
-        f"[START] Task: {task} | Env: {env} | Model: {model} | Time: {datetime.now().isoformat()}",
-        flush=True,
-    )
+    print(f"[START] task={task} env={env} model={model}", flush=True)
 
 
 def log_step(step: int, action: str, reward: float, done: bool, error: str = None):
-    error_str = f" | Error: {error}" if error else ""
+    error_str = f" error={error}" if error else ""
     print(
-        f"[STEP] Step: {step} | Action: {action} | Reward: {reward:+.4f} | Done: {done}{error_str}",
+        f"[STEP]  step={step} action={action} reward={reward:.4f} done={str(done).lower()}{error_str}",
         flush=True,
     )
 
 
 def log_end(success: bool, steps: int, score: float, rewards: List[float]):
+    rewards_str = ",".join([f"{r:.4f}" for r in rewards])
     print(
-        f"[END] Success: {success} | Steps: {steps} | Score: {score:.4f} | Total Rewards: {sum(rewards):.4f}",
+        f"[END]   success={str(success).lower()} steps={steps} score={score:.4f} rewards={rewards_str}",
         flush=True,
     )
 
@@ -49,9 +47,36 @@ def format_reward(reward: float) -> str:
     return f"{reward:.4f}"
 
 
-def analyze_and_decide(observation: Dict[str, Any]) -> Dict[str, Any]:
+def analyze_and_decide(observation: Dict[str, Any], client=None) -> Dict[str, Any]:
     """LLM-powered decision making using OpenAI API if available, otherwise rule-based."""
     current_ad = observation.get("current_ad", {})
+
+    if client and HAS_OPENAI:
+        try:
+            prompt = f"""You are an AI Safety moderator for Meta's advertising platform. Analyze this ad and respond ONLY with a JSON object containing 'action' and 'rationale'.
+Available actions: APPROVE, FLAG, REJECT, VERIFY_CLAIM, GENERATE_DOSSIER, VERIFY_EVIDENCE, CHECK_COORDINATION, CHECK_URL_CHAIN.
+
+Ad Text: {current_ad.get("ad_text", "N/A")}
+Severity: {current_ad.get("severity_level", "S5_spam")}
+Advertiser ID: {current_ad.get("advertiser_id", "N/A")}
+Requires DSA: {current_ad.get("requires_dsa_statement", False)}
+Requires Dossier: {current_ad.get("requires_dossier", False)}
+
+Respond with JSON only: {{"action": "ACTION", "rationale": "reason"}}"""
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=200,
+            )
+            result = json.loads(response.choices[0].message.content)
+            return {
+                "action": result.get("action", "APPROVE"),
+                "rationale": result.get("rationale", ""),
+                "tool_parameters": {},
+            }
+        except Exception as e:
+            pass
 
     ad_text = current_ad.get("ad_text", "").lower()
     advertiser_id = current_ad.get("advertiser_id", "")
@@ -210,6 +235,13 @@ def main():
     task = sys.argv[1] if len(sys.argv) > 1 else "easy_prohibited_content"
     MAX_STEPS = 50
 
+    client = None
+    if HAS_OPENAI:
+        try:
+            client = OpenAI(base_url=API_BASE_URL, api_key=OPENAI_API_KEY)
+        except Exception:
+            pass
+
     log_start(task=task, env="MetaGuardPro", model=MODEL_NAME)
 
     # Reset environment
@@ -271,7 +303,7 @@ def main():
             continue
 
         # Analyze and decide
-        decision = analyze_and_decide(initial_obs)
+        decision = analyze_and_decide(initial_obs, client)
         action_type = decision.get("action", "APPROVE")
 
         is_tool_call = action_type in [

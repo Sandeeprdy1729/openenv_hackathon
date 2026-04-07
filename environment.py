@@ -1926,7 +1926,7 @@ env = MetaGuardProEnv()
 
 @app.get("/health", response_model=HealthResponse)
 async def health():
-    return HealthResponse(status="healthy", version="3.0.0")
+    return HealthResponse(status="healthy", version="4.0.0")
 
 
 @app.get("/ready")
@@ -1938,7 +1938,7 @@ async def ready():
 async def reset(task: Optional[str] = None):
     obs = env.reset(task)
     return ResetResponse(
-        observation=obs, info={"task": task or "default", "version": "3.0.0"}
+        observation=obs, info={"task": task or "default", "version": "4.0.0"}
     )
 
 

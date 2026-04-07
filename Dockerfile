@@ -8,6 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY environment.py .
 COPY openenv.yaml .
 COPY inference.py .
+COPY app.py .
 
 ENV PYTHONUNBUFFERED=1
 

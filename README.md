@@ -157,22 +157,23 @@ ad_integrity/
 
 ```
 # easy_prohibited_content
-[START] Task: easy_prohibited_content | Env: MetaGuardPro | Model: gpt-4o
-[STEP] Step: 1 | Action: GENERATE_DOSSIER | Reward: +0.7900 | Done: False
-[STEP] Step: 2 | Action: GENERATE_DOSSIER | Reward: +0.7900 | Done: False
-[STEP] Step: 8 | Action: REJECT | Reward: +0.7700 | Done: True
-[END] Success: False | Steps: 8 | Score: 0.4933 | Total Rewards: 5.9200
+[START] task=easy_prohibited_content env=MetaGuardPro model=gpt-4o
+[STEP]  step=1 action=GENERATE_DOSSIER reward=0.7900 done=false
+[STEP]  step=2 action=GENERATE_DOSSIER reward=0.7900 done=false
+[STEP]  step=8 action=REJECT reward=0.7700 done=true
+[END]   success=false steps=8 score=0.4933 rewards=0.7900,0.7900,0.7700
 
 # crescendo_bot_grooming (10-step escalation pattern)
-[START] Task: crescendo_bot_grooming | Env: MetaGuardPro | Model: gpt-4o
-[END] Success: True | Steps: 10 | Score: 0.6483 | Total Rewards: 7.7800
+[START] task=crescendo_bot_grooming env=MetaGuardPro model=gpt-4o
+[STEP]  step=10 action=REJECT reward=0.6500 done=true
+[END]   success=true steps=10 score=0.6483 rewards=0.6500,0.6500,0.6500
 
 # multi_jurisdictional_policy (Brazil statute)
 Jurisdiction: BR, IsMultijurisdictional: True
 Ad: Health supplement claims to treat COVID...
 ```
 
-**All tasks**: Health check returns `{"status":"healthy","version":"3.0.0"}`
+**All tasks**: Health check returns `{"status":"healthy","version":"4.0.0"}`
 
 ## Quick Start
 
