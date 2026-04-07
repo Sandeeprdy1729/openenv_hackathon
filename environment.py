@@ -1929,6 +1929,11 @@ async def health():
     return HealthResponse(status="healthy", version="4.0.0")
 
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "MetaGuard Pro API is running"}
+
+
 @app.get("/ready")
 async def ready():
     return {"ready": True}
