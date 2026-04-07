@@ -1,7 +1,5 @@
 # Wrapper to redirect to environment app
 from environment import app
 
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="0.0.0.0", port=7860)
+# Re-export for HF Spaces compatibility
+# The actual app is defined in environment.py

@@ -1,0 +1,22 @@
+[project]
+name = "metaguard-pro"
+version = "4.0.0"
+description = "MetaGuard Pro v4.0 - Adversarial Safety Sandbox for Llama Guard"
+requires-python = ">=3.9"
+
+[tool.openenv]
+name = "MetaGuardPro"
+version = "4.0.0"
+tasks = [
+    "easy_prohibited_content",
+    "medium_bridge_page_scam",
+    "hard_hallucination_stress_test",
+    "idpi_smuggling_test",
+    "multilingual_bypass_test",
+    "synchronized_health_hoax",
+    "extreme_multimodal_discrepancy",
+    "ultimate_hitl_appeal_generation",
+    "crescendo_bot_grooming",
+    "multi_jurisdictional_policy"
+]
+entry_point = "app.py"
