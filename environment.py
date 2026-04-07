@@ -1966,6 +1966,10 @@ async def call_tool(request: Dict[str, Any]):
     result = env.call_tool(tool_name, parameters)
     return {"tool_name": tool_name, "result": result}
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "MetaGuard Pro API is running"}
+
 
 if __name__ == "__main__":
     import argparse
