@@ -10,6 +10,11 @@ import uvicorn
 app = FastAPI(title="MetaGuard Pro - Adversarial Safety Sandbox")
 
 
+@app.get("/")
+async def root():
+    return {"status": "ok", "message": "MetaGuard Pro API is running"}
+
+
 class ActionType(str, Enum):
     APPROVE = "APPROVE"
     FLAG = "FLAG"
@@ -1927,11 +1932,6 @@ env = MetaGuardProEnv()
 @app.get("/health", response_model=HealthResponse)
 async def health():
     return HealthResponse(status="healthy", version="4.0.0")
-
-
-@app.get("/")
-async def root():
-    return {"status": "ok", "message": "MetaGuard Pro API is running"}
 
 
 @app.get("/ready")
