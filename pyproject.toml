@@ -3,6 +3,16 @@ name = "metaguard-pro"
 version = "4.0.0"
 description = "MetaGuard Pro v4.0 - Adversarial Safety Sandbox for Llama Guard"
 requires-python = ">=3.9"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "requests",
+    "openenv>=0.1.13",
+]
+
+[project.scripts]
+server = "app:app"
 
 [tool.openenv]
 name = "MetaGuardPro"
@@ -19,4 +29,4 @@ tasks = [
     "crescendo_bot_grooming",
     "multi_jurisdictional_policy"
 ]
-entry_point = "app.py"
+entry_point = "server:app"

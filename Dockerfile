@@ -8,10 +8,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY environment.py .
 COPY openenv.yaml .
 COPY inference.py .
-COPY app.py .
+COPY server/ ./server/
+COPY pyproject.toml .
 
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 7860
 
-CMD ["python3", "-u", "app.py"]
+CMD ["python3", "-u", "server/app.py"]
