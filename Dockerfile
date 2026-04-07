@@ -14,4 +14,4 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 7860
 
-CMD ["python3", "-u", "environment.py", "--port", "7860"]
+CMD ["python3", "-u", "app.py"]

@@ -10,10 +10,6 @@ import uvicorn
 app = FastAPI(title="MetaGuard Pro - Adversarial Safety Sandbox")
 
 
-@app.get("/")
-async def root():
-    return {"status": "ok", "message": "MetaGuard Pro API is running"}
-
 
 class ActionType(str, Enum):
     APPROVE = "APPROVE"
