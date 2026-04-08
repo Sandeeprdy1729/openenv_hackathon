@@ -3,22 +3,22 @@ import os
 import sys
 import time
 import requests
+import json
 from typing import Dict, Any, List
 from datetime import datetime
 
-# Environment variables for API configuration
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
-MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o")
-HF_TOKEN = os.environ.get("HF_TOKEN", "")
-API_KEY = os.environ.get("API_KEY", "")
 
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
+API_KEY = os.environ.get("API_KEY", "dummy_key_if_empty")
+MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o")
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:7860")
 
-# Try to use OpenAI client
+
 try:
     from openai import OpenAI
-
-    HAS_OPENAI = bool(API_KEY)
+    # Force the client to use the exact proxy URL and injected API key
+    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    HAS_OPENAI = True
 except ImportError:
     HAS_OPENAI = False
 
@@ -47,188 +47,26 @@ def format_reward(reward: float) -> str:
     return f"{reward:.4f}"
 
 
-def analyze_and_decide(observation: Dict[str, Any], client=None) -> Dict[str, Any]:
-    """LLM-powered decision making using OpenAI API if available, otherwise rule-based."""
+def analyze_and_decide(observation: Dict[str, Any], client) -> Dict[str, Any]:
+    """LLM-powered decision making using OpenAI API."""
     current_ad = observation.get("current_ad", {})
-
-    if client and HAS_OPENAI:
-        try:
-            prompt = f"""You are an AI Safety moderator for Meta's advertising platform. Analyze this ad and respond ONLY with a JSON object containing 'action' and 'rationale'.
-Available actions: APPROVE, FLAG, REJECT, VERIFY_CLAIM, GENERATE_DOSSIER, VERIFY_EVIDENCE, CHECK_COORDINATION, CHECK_URL_CHAIN.
-
-Ad Text: {current_ad.get("ad_text", "N/A")}
-Severity: {current_ad.get("severity_level", "S5_spam")}
-Advertiser ID: {current_ad.get("advertiser_id", "N/A")}
-Requires DSA: {current_ad.get("requires_dsa_statement", False)}
-Requires Dossier: {current_ad.get("requires_dossier", False)}
-
-Respond with JSON only: {{"action": "ACTION", "rationale": "reason"}}"""
-            response = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
-                max_tokens=200,
-            )
-            result = json.loads(response.choices[0].message.content)
-            return {
-                "action": result.get("action", "APPROVE"),
-                "rationale": result.get("rationale", ""),
-                "tool_parameters": {},
-            }
-        except Exception as e:
-            pass
-
-    ad_text = current_ad.get("ad_text", "").lower()
-    advertiser_id = current_ad.get("advertiser_id", "")
-    severity = current_ad.get("severity_level", "S5_spam")
-    requires_dsa = current_ad.get("requires_dsa_statement", False)
-    requires_dossier = current_ad.get("requires_dossier", False)
-    ocr_content = current_ad.get("ocr_content")
-
-    # Multi-modal scam detection
-    if ocr_content and (
-        "scam" in ocr_content.lower()
-        or "qr" in ocr_content.lower()
-        or "phishing" in ocr_content.lower()
-    ):
-        return {
-            "action": "GENERATE_DOSSIER",
-            "tool_parameters": {
-                "ad_id": current_ad.get("ad_id", ""),
-                "violation_summary": "Text-image discrepancy: Text says 'adopt puppy' but image contains QR code to phishing site",
-            },
-            "rationale": "Multi-modal discrepancy detected. Image OCR reveals phishing QR code embedded in 'cute puppy' image. S2 severity bridge page scam.",
-        }
-
-    # Check for Meta scam
-    if any(word in ad_text for word in ["whatsapp", "instagram", "facebook", "meta"]):
-        if any(
-            phrase in ad_text
-            for phrase in [
-                "shutting down",
-                "will start charging",
-                "data breach",
-                "scam",
-                "fake",
-                "free",
-            ]
-        ):
-            return {
-                "action": "VERIFY_CLAIM",
-                "tool_parameters": {"claim": ad_text},
-                "rationale": "Potential disinformation - checking fact-check database",
-            }
-
-    # S1 severity requires dossier
-    if severity == "S1_legal" or requires_dossier:
-        return {
-            "action": "GENERATE_DOSSIER",
-            "tool_parameters": {
-                "ad_id": current_ad.get("ad_id", ""),
-                "violation_summary": f"S1 violent content: {ad_text[:50]}",
-            },
-            "rationale": "S1 severity requires human review dossier",
-        }
-
-    # Health hoax detection
-    health_keywords = [
-        "vaccine",
-        "autism",
-        "vitamin",
-        "cancer",
-        "detox",
-        "cure",
-        "arsenic",
-        "cyanide",
-        "magnetic",
-        "bracelet",
-        "covid",
-        "lab",
-    ]
-    if any(keyword in ad_text for keyword in health_keywords) and any(
-        word in ad_text
-        for word in ["study", "doctors", "hidden", "cure", "treat", "exposed", "truth"]
-    ):
-        core_assertion = current_ad.get("policy_docs", {}).get("scientific_claim", "")
-        if not core_assertion:
-            if "vaccine" in ad_text and "autism" in ad_text:
-                core_assertion = "vaccine causes autism"
-            elif "vitamin" in ad_text and "cancer" in ad_text:
-                core_assertion = "vitamin c cures cancer"
-            elif "detox" in ad_text:
-                core_assertion = "detox cleanses toxins"
-            elif "apple" in ad_text and "cyanide" in ad_text:
-                core_assertion = "apple seeds contain cyanide"
-            elif "magnetic" in ad_text or "bracelet" in ad_text:
-                core_assertion = "magnetic bracelets cure arthritis"
-            elif "covid" in ad_text and "lab" in ad_text:
-                core_assertion = "covid created in lab"
-
-        policy_claim = current_ad.get("policy_docs", {}).get("scientific_claim", "")
-        if policy_claim:
-            core_assertion = policy_claim
-
-        return {
-            "action": "VERIFY_EVIDENCE",
-            "tool_parameters": {
-                "claim": core_assertion,
-                "core_assertion": core_assertion,
-            },
-            "rationale": f"Health claim detected: '{core_assertion}'. Verifying against peer-reviewed evidence database.",
-        }
-
-    # Prohibited content
-    prohibited_keywords = [
-        "adult content",
-        "fake id",
-        "cocaine",
-        "explosive",
-        "weapon",
-        "graphic violence",
-    ]
-    for keyword in prohibited_keywords:
-        if keyword in ad_text:
-            rationale = f"Prohibited content: {keyword}. Section 2.1 MLCommons S3."
-            if requires_dossier:
-                return {
-                    "action": "GENERATE_DOSSIER",
-                    "tool_parameters": {
-                        "ad_id": current_ad.get("ad_id", ""),
-                        "violation_summary": f"Prohibited content: {keyword}",
-                    },
-                    "rationale": rationale,
-                }
-            return {"action": "REJECT", "rationale": rationale}
-
-    # Suspicious URL
-    suspicious_domains = [
-        "free-gift-claim.xyz",
-        "winner-notification.net",
-        "urgent-prize.click",
-    ]
-    if any(
-        d in current_ad.get("destination_url", "").lower() for d in suspicious_domains
-    ):
-        return {
-            "action": "CHECK_URL_CHAIN",
-            "tool_parameters": {
-                "destination_url": current_ad.get("destination_url", "")
-            },
-            "rationale": "Suspicious URL - analyzing redirect chain",
-        }
-
-    # Urgency language - check coordination
-    if "verify" in ad_text or "suspended" in ad_text or "urgent" in ad_text:
-        return {
-            "action": "CHECK_COORDINATION",
-            "tool_parameters": {"advertiser_ids": [advertiser_id]},
-            "rationale": "Urgency language + suspicious - checking coordination",
-        }
-
-    return {
-        "action": "APPROVE",
-        "rationale": "No policy violations detected - content compliant",
-    }
+    
+    prompt = f"""
+    You are an AI Safety moderator. Analyze this ad and respond ONLY with a JSON object containing 'action', 'tool_parameters' (if needed), and 'rationale'.
+    Ad Text: {current_ad.get('ad_text')}
+    Severity: {current_ad.get('severity_level')}
+    Available Actions: APPROVE, FLAG, REJECT, VERIFY_EVIDENCE, CHECK_URL_CHAIN, GENERATE_DOSSIER.
+    """
+    
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        return json.loads(response.choices[0].message.content)
+    except Exception as e:
+        return {"action": "APPROVE", "rationale": f"Fallback due to error: {e}"}
 
 
 def main():
