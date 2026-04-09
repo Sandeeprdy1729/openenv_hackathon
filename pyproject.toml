@@ -1,34 +1,22 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "ad_integrity"
+name = "openenv-ad_integrity"
 version = "1.0.0"
 description = "Ad Moderation OpenEnv Benchmark"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
-    "fastapi",
-    "uvicorn",
-    "pydantic",
-    "openenv>=0.1.13",
+    "openenv-core[core]>=0.2.2",
     "openai",
     "python-dotenv",
 ]
 
 [project.scripts]
-server = "server.app:main"
+server = "ad_integrity.server.app:main"
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
-[tool.uv]
-package = true
-
-[tool.openenv]
-name = "AdModeration"
-version = "1.0.0"
-tasks = [
-    "spam_detection",
-    "hate_speech_detection",
-    "misinformation_detection",
-    "safe_content"
-]
-entry_point = "server:app"
+[tool.setuptools]
+include-package-data = true
+packages = ["ad_integrity", "ad_integrity.server", "ad_integrity.tasks"]
+package-dir = { "ad_integrity" = ".", "ad_integrity.server" = "server", "ad_integrity.tasks" = "tasks" }
