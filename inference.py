@@ -1,338 +1,209 @@
 #!/usr/bin/env python3
+"""
+inference.py — Ad Moderation OpenEnv Agent
+==========================================
+Runs an LLM agent through all 4 content moderation tasks.
+
+Required environment variables:
+    API_BASE_URL      LLM API endpoint
+    MODEL_NAME        Model identifier
+    HF_TOKEN          HuggingFace / API key
+    LOCAL_IMAGE_NAME  (optional) Docker image to launch as env server
+
+Stdout format:
+    [START] task=<task> env=<benchmark> model=<model>
+    [STEP]  step=<n> action=<action> reward=<0.00> done=<true|false> error=<msg|null>
+    [END]   success=<true|false> steps=<n> score=<0.000> rewards=<r1,r2,...>
+"""
+
 import os
-import sys
-import time
-import requests
-import json
-from typing import Dict, Any, List
-from datetime import datetime
+import textwrap
+from typing import List, Optional
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from openai import OpenAI
+
+from models import AdModerationAction
+from client import AdModerationClient
+
+IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
+API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:8000")
+BENCHMARK = "ad_moderation"
+
+MAX_STEPS = 3
+SUCCESS_SCORE_THRESHOLD = 0.5
+TEMPERATURE = 0.2
+MAX_TOKENS = 1024
+
+TASKS = [
+    "spam_detection",
+    "hate_speech_detection",
+    "misinformation_detection",
+    "safe_content",
+]
+
+SYSTEM_PROMPT = textwrap.dedent("""
+    You are an AI content moderator for social media advertisements.
+    You will receive ad content with severity indicators and metadata.
+
+    Choose exactly one action:
+      APPROVE  — Content is legitimate and follows community guidelines
+      REJECT  — Content violates guidelines (spam, hate speech, misinformation)
+      FLAG    — Content needs additional review
+
+    Reply with EXACTLY ONE WORD: APPROVE, REJECT, or FLAG.
+    No explanation. No punctuation. No extra text.
+""").strip()
 
 
-API_BASE_URL = os.environ["API_BASE_URL"]
-API_KEY = os.environ["API_KEY"]
-MODEL_NAME = os.environ.get("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:7860")
-
-
-try:
-    from openai import OpenAI
-
-    # Force the client to use the exact proxy URL and injected API key
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
-    HAS_OPENAI = True
-except ImportError:
-    HAS_OPENAI = False
-
-
-def log_start(task: str, env: str, model: str):
+def log_start(task: str, env: str, model: str) -> None:
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
 
-def log_step(step: int, action: str, reward: float, done: bool, error: str = None):
-    error_str = f" error={error}" if error else ""
+def log_step(
+    step: int, action: str, reward: float, done: bool, error: Optional[str]
+) -> None:
+    error_val = error if error else "null"
+    done_val = str(done).lower()
     print(
-        f"[STEP]  step={step} action={action} reward={reward:.4f} done={str(done).lower()}{error_str}",
+        f"[STEP] step={step} action={action} reward={reward:.2f} done={done_val} error={error_val}",
         flush=True,
     )
 
 
-def log_end(success: bool, steps: int, score: float, rewards: List[float]):
-    rewards_str = ",".join([f"{r:.4f}" for r in rewards])
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
     print(
-        f"[END]   success={str(success).lower()} steps={steps} score={score:.4f} rewards={rewards_str}",
+        f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}",
         flush=True,
     )
 
 
-def format_reward(reward: float) -> str:
-    return f"{reward:.4f}"
+def get_model_action(client: OpenAI, observation: str, history: List[str]) -> str:
+    """Ask the LLM to decide APPROVE / REJECT / FLAG."""
+    history_block = "\n".join(history[-3:]) if history else "None"
+    user_prompt = f"""Ad Content:
+{observation}
 
+Previous decisions this episode:
+{history_block}
 
-def analyze_and_decide(observation: Dict[str, Any], client) -> Dict[str, Any]:
-    """LLM-powered decision making using OpenAI API."""
-    current_ad = observation.get("current_ad", {})
-
-    prompt = f"""
-    You are an AI Safety moderator. Analyze this ad and respond ONLY with a JSON object containing 'action', 'tool_parameters' (if needed), and 'rationale'.
-    Ad Text: {current_ad.get("ad_text")}
-    Severity: {current_ad.get("severity_level")}
-    Available Actions: APPROVE, FLAG, REJECT, VERIFY_EVIDENCE, CHECK_URL_CHAIN, GENERATE_DOSSIER.
-    """
+Your decision (APPROVE, REJECT, or FLAG):"""
 
     try:
-        response = client.chat.completions.create(
+        completion = client.chat.completions.create(
             model=MODEL_NAME,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=TEMPERATURE,
+            max_tokens=MAX_TOKENS,
+            stream=False,
         )
-        return json.loads(response.choices[0].message.content)
-    except Exception as e:
-        return {"action": "APPROVE", "rationale": f"Fallback due to error: {e}"}
+        import re
+
+        text = (completion.choices[0].message.content or "").strip().upper()
+
+        text_no_think = re.sub(r"<THINK>.*?</THINK>", "", text, flags=re.DOTALL)
+        text_no_think = re.sub(r"<THINK>.*", "", text_no_think, flags=re.DOTALL)
+
+        for action in ("APPROVE", "REJECT", "FLAG"):
+            if action in text_no_think:
+                return action.lower()
+
+        for action in ("APPROVE", "REJECT", "FLAG"):
+            if action in text:
+                return action.lower()
+
+        print(
+            f"[DEBUG] Unexpected model output: {text[:100]!r} — defaulting to approve"
+        )
+        return "approve"
+
+    except Exception as exc:
+        print(f"[DEBUG] Model request failed: {exc}")
+        return "approve"
 
 
-def main():
-    task = sys.argv[1] if len(sys.argv) > 1 else "easy_prohibited_content"
-    MAX_STEPS = 50
+def run_task(client: OpenAI, task_name: str) -> None:
+    """Run one full episode for the given task."""
 
-    client = None
-    if HAS_OPENAI:
-        try:
-            client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
-        except Exception:
-            pass
+    if IMAGE_NAME:
+        env_instance = AdModerationClient.from_docker_image(IMAGE_NAME, task=task_name)
+    else:
+        env_instance = AdModerationClient(base_url=ENV_BASE_URL)
 
-    log_start(task=task, env="MetaGuardPro", model=MODEL_NAME)
+    history: List[str] = []
+    rewards: List[float] = []
+    steps_taken = 0
+    score = 0.0
+    success = False
+    last_error: Optional[str] = None
 
-    # Reset environment
+    log_start(task=task_name, env=BENCHMARK, model=MODEL_NAME)
+
     try:
-        reset_resp = requests.post(
-            f"{BASE_URL}/reset", params={"task": task}, timeout=10
-        )
-        if reset_resp.status_code != 200:
-            print(
-                f"[DEBUG] Reset failed: {reset_resp.status_code}",
-                flush=True,
-                file=sys.stderr,
-            )
-            log_end(success=False, steps=0, score=0.0, rewards=[])
-            return
-        initial_obs = reset_resp.json().get("observation", {})
-    except Exception as e:
-        print(f"[DEBUG] Reset error: {e}", flush=True, file=sys.stderr)
-        log_end(success=False, steps=0, score=0.0, rewards=[])
-        return
-
-    total_reward = 0.0
-    steps = 0
-    tools_used = 0
-    rewards = []
-    start_time = time.time()
-
-    while steps < MAX_STEPS:
-        # Check state
-        try:
-            state_resp = requests.get(f"{BASE_URL}/state", timeout=5)
-            state = state_resp.json()
-            if state.get("queue_size", 0) == 0:
-                break
-        except Exception as e:
-            log_step(step=steps + 1, action="ERROR", reward=0, done=True, error=str(e))
-            break
-
-        current_obs = initial_obs.get("current_ad")
-        if not current_obs:
-            step_resp = requests.post(
-                f"{BASE_URL}/step",
-                json={"action": "APPROVE", "rationale": "No content"},
-            )
-            step_result = step_resp.json()
-            reward = step_result.get("reward", 0)
-            total_reward += reward
-            steps += 1
-            rewards.append(reward)
-            log_step(
-                step=steps,
-                action="APPROVE",
-                reward=reward,
-                done=step_result.get("done", False),
-            )
-            initial_obs = step_result.get("observation", {})
-            if step_result.get("done"):
-                break
-            continue
-
-        # Analyze and decide
-        decision = analyze_and_decide(initial_obs, client)
-        action_type = decision.get("action", "APPROVE")
-
-        is_tool_call = action_type in [
-            "CHECK_URL_CHAIN",
-            "CHECK_ADVERTISER",
-            "CHECK_COORDINATION",
-            "SEARCH_POLICY",
-            "VERIFY_CLAIM",
-            "SCAN_MEDIA",
-            "GENERATE_DOSSIER",
-            "VERIFY_EVIDENCE",
-            "IMAGE_PROVENANCE_CHECK",
-        ]
-
-        if is_tool_call:
-            tools_used += 1
-
-            step_resp = requests.post(
-                f"{BASE_URL}/step",
-                json={
-                    "action": action_type,
-                    "tool_parameters": decision.get("tool_parameters", {}),
-                    "rationale": decision.get("rationale", ""),
-                },
-            )
-            step_result = step_resp.json()
-
-            if step_result.get("done"):
-                reward = step_result.get("reward", 0)
-                total_reward += reward
-                steps += 1
-                rewards.append(reward)
-                log_step(step=steps, action=action_type, reward=reward, done=True)
-                break
-
-            tool_result = step_result.get("info", {}).get("tool_result", {})
-            obs = step_result.get("observation", {})
-
-            # Handle VERIFY_EVIDENCE with truth_grounded
-            if action_type == "VERIFY_EVIDENCE" and tool_result.get("truth_grounded"):
-                status = tool_result.get("status", "UNKNOWN")
-                captured_source = tool_result.get("source", "")
-                captured_core = tool_result.get("core_assertion", "")
-
-                if status == "FALSE":
-                    # Check image provenance then reject
-                    step_resp = requests.post(
-                        f"{BASE_URL}/step",
-                        json={
-                            "action": "IMAGE_PROVENANCE_CHECK",
-                            "tool_parameters": {},
-                            "rationale": f"Evidence verified FALSE by {captured_source}",
-                        },
-                    )
-                    step_result = step_resp.json()
-                    if step_result.get("done"):
-                        reward = step_result.get("reward", 0)
-                        total_reward += reward
-                        steps += 1
-                        rewards.append(reward)
-                        log_step(step=steps, action="REJECT", reward=reward, done=True)
-                        break
-
-                    prov_result = step_result.get("info", {}).get("tool_result", {})
-                    dsa_rationale = (
-                        f"Health disinformation verified FALSE by {captured_source}."
-                    )
-
-                    step_resp = requests.post(
-                        f"{BASE_URL}/step",
-                        json={"action": "REJECT", "rationale": dsa_rationale},
-                    )
-                    step_result = step_resp.json()
-                else:
-                    step_resp = requests.post(
-                        f"{BASE_URL}/step",
-                        json={
-                            "action": "APPROVE",
-                            "rationale": f"Evidence check: {captured_source}",
-                        },
-                    )
-                    step_result = step_resp.json()
-
-                reward = step_result.get("reward", 0)
-                total_reward += reward
-                steps += 1
-                rewards.append(reward)
-                log_step(
-                    step=steps,
-                    action="REJECT" if status == "FALSE" else "APPROVE",
-                    reward=reward,
-                    done=step_result.get("done", False),
-                )
-                initial_obs = step_result.get("observation", {})
-                if step_result.get("done"):
-                    break
-                continue
-
-            # Handle other tool results
-            if action_type == "VERIFY_CLAIM" and tool_result.get("verified"):
-                status = tool_result.get("status", "UNKNOWN")
-                if status == "FALSE":
-                    step_resp = requests.post(
-                        f"{BASE_URL}/step",
-                        json={
-                            "action": "REJECT",
-                            "rationale": f"DISINFO: Fact-check verified FALSE. Source: {tool_result.get('source')}",
-                        },
-                    )
-                else:
-                    step_resp = requests.post(
-                        f"{BASE_URL}/step",
-                        json={
-                            "action": "APPROVE",
-                            "rationale": "No fact-check match found",
-                        },
-                    )
-            elif action_type == "CHECK_COORDINATION" and tool_result.get(
-                "is_coordinated"
-            ):
-                step_resp = requests.post(
-                    f"{BASE_URL}/step",
-                    json={
-                        "action": "REJECT",
-                        "rationale": f"CIB: Bot farm pattern - {tool_result.get('posting_pattern')}",
-                    },
-                )
-            elif action_type == "CHECK_URL_CHAIN" and tool_result.get("is_suspicious"):
-                step_resp = requests.post(
-                    f"{BASE_URL}/step",
-                    json={
-                        "action": "REJECT",
-                        "rationale": f"Bridge page: {tool_result.get('redirection_scheme')}",
-                    },
-                )
-            elif action_type == "GENERATE_DOSSIER" and tool_result.get("generated"):
-                step_resp = requests.post(
-                    f"{BASE_URL}/step",
-                    json={
-                        "action": "REJECT",
-                        "rationale": decision.get("rationale", ""),
-                        "dossier": tool_result.get("content", ""),
-                    },
-                )
+        with env_instance.sync() as env:
+            if not IMAGE_NAME:
+                result = env.reset(task_id=task_name)
             else:
-                step_resp = requests.post(
-                    f"{BASE_URL}/step",
-                    json={
-                        "action": "APPROVE",
-                        "rationale": f"Tool {action_type}: No issues found",
-                    },
+                result = env.reset()
+
+            for step in range(1, MAX_STEPS + 1):
+                if result.done:
+                    break
+
+                observation_text = result.observation.text
+                action_str = get_model_action(client, observation_text, history)
+
+                try:
+                    result = env.step(AdModerationAction(action=action_str))
+                    last_error = None
+                except Exception as exc:
+                    last_error = str(exc)
+                    result.done = True
+
+                reward = result.reward or 0.0
+                done = result.done
+
+                rewards.append(reward)
+                steps_taken = step
+
+                log_step(
+                    step=step,
+                    action=action_str,
+                    reward=reward,
+                    done=done,
+                    error=last_error,
                 )
-        else:
-            step_resp = requests.post(
-                f"{BASE_URL}/step",
-                json={
-                    "action": action_type,
-                    "rationale": decision.get("rationale", ""),
-                },
-            )
+                history.append(f"Step {step}: {action_str} → reward {reward:.2f}")
 
-        step_result = step_resp.json()
-        reward = step_result.get("reward", 0)
-        total_reward += reward
-        steps += 1
-        rewards.append(reward)
-        done = step_result.get("done", False)
+                if done:
+                    break
 
-        log_step(step=steps, action=action_type, reward=reward, done=done)
-        initial_obs = step_result.get("observation", {})
+        score = sum(rewards) / len(rewards) if rewards else 0.0
+        score = max(1e-6, min(score, 1 - 1e-6))
+        success = score >= SUCCESS_SCORE_THRESHOLD
 
-        if done:
-            break
+    except Exception as exc:
+        print(f"[DEBUG] Task {task_name} error: {exc}")
+        last_error = str(exc)
 
-    # Calculate final score
-    elapsed = time.time() - start_time
-    final_state = requests.get(f"{BASE_URL}/state").json()
-    accuracy = final_state.get("accuracy", 0.0)
+    finally:
+        log_end(success=success, steps=steps_taken, score=score, rewards=rewards)
 
-    # Normalize total reward to 0-1 range
-    score = min(max(total_reward / 12.0, 0.0), 1.0)  # 12 is max steps * max reward
-    success = score >= 0.5
 
-    log_end(success=success, steps=steps, score=score, rewards=rewards)
-
-    print(
-        f"[DEBUG] Elapsed: {elapsed:.1f}s | Accuracy: {accuracy:.2f} | Tools: {tools_used}",
-        flush=True,
-        file=sys.stderr,
-    )
+def main() -> None:
+    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    for task_name in TASKS:
+        run_task(client, task_name)
 
 
 if __name__ == "__main__":
