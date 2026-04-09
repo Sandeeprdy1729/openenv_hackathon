@@ -8,14 +8,15 @@ from typing import Dict, Any, List
 from datetime import datetime
 
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://api.openai.com/v1")
-API_KEY = os.environ.get("API_KEY", "dummy_key_if_empty")
-MODEL_NAME = os.environ.get("MODEL_NAME", "gpt-4o")
+API_BASE_URL = os.environ["API_BASE_URL"]
+API_KEY = os.environ["API_KEY"]
+MODEL_NAME = os.environ["MODEL_NAME"]
 BASE_URL = os.environ.get("BASE_URL", "http://localhost:7860")
 
 
 try:
     from openai import OpenAI
+
     # Force the client to use the exact proxy URL and injected API key
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
     HAS_OPENAI = True
@@ -50,19 +51,19 @@ def format_reward(reward: float) -> str:
 def analyze_and_decide(observation: Dict[str, Any], client) -> Dict[str, Any]:
     """LLM-powered decision making using OpenAI API."""
     current_ad = observation.get("current_ad", {})
-    
+
     prompt = f"""
     You are an AI Safety moderator. Analyze this ad and respond ONLY with a JSON object containing 'action', 'tool_parameters' (if needed), and 'rationale'.
-    Ad Text: {current_ad.get('ad_text')}
-    Severity: {current_ad.get('severity_level')}
+    Ad Text: {current_ad.get("ad_text")}
+    Severity: {current_ad.get("severity_level")}
     Available Actions: APPROVE, FLAG, REJECT, VERIFY_EVIDENCE, CHECK_URL_CHAIN, GENERATE_DOSSIER.
     """
-    
+
     try:
         response = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"}
+            response_format={"type": "json_object"},
         )
         return json.loads(response.choices[0].message.content)
     except Exception as e:
