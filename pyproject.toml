@@ -1,6 +1,6 @@
 [project]
 name = "ad-integrity-openenv"
-version = "2.0.0"
+version = "0.1.0"
 description = "Ad Integrity content moderation RL environment for OpenEnv"
 requires-python = ">=3.10"
 dependencies = [
@@ -20,4 +20,5 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.uv]
+package = false
 dev-dependencies = []
