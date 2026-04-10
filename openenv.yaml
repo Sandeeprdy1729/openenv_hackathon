@@ -1,61 +1,83 @@
-name: Ad Moderation Environment
+name: ad_integrity
+version: "2.0.0"
 description: >
-  An OpenEnv-compliant environment for content moderation benchmarking.
-  An LLM agent receives ad content with metadata and must decide to APPROVE, REJECT, or FLAG.
-version: "1.0.0"
-author: Team RL Meta
+  A real-world content moderation RL environment where an AI agent reviews
+  social media advertisements and decides whether to APPROVE, REJECT, or FLAG
+  each ad based on policy violations including spam, hate speech, misinformation,
+  and multi-violation combinations. Designed to benchmark LLM judgment in
+  high-stakes moderation decisions.
+
+author: "Team RL Meta — Sanjay Utchula, Sandeep Thummala, Umesh Chandran Yenugula"
+
+tasks:
+  - id: spam_detection
+    description: "Detect spam advertisements: phishing, prize scams, get-rich-quick schemes (Easy)"
+    difficulty: easy
+    reward_range: [0.0, 1.0]
+
+  - id: hate_speech_detection
+    description: "Detect hate speech and discriminatory content in advertisements (Medium)"
+    difficulty: medium
+    reward_range: [0.0, 1.0]
+
+  - id: misinformation_detection
+    description: "Detect false medical claims, pseudoscience, and health misinformation (Medium)"
+    difficulty: medium
+    reward_range: [0.0, 1.0]
+
+  - id: safe_content
+    description: "Correctly approve legitimate advertisements from real brands (Easy)"
+    difficulty: easy
+    reward_range: [0.0, 1.0]
+
+  - id: multi_violation_detection
+    description: "Detect complex ads combining multiple policy violations (Hard)"
+    difficulty: hard
+    reward_range: [0.0, 1.0]
 
 observation_space:
   type: text
-  description: >
-    Ad content with severity indicators, previous violations, and platform metadata.
+  fields:
+    - name: text
+      type: string
+      description: "Full formatted prompt shown to the agent"
+    - name: task_id
+      type: string
+    - name: ad_content
+      type: string
+      description: "Raw advertisement text being moderated"
+    - name: severity
+      type: string
+      enum: [low, medium, high, critical]
+    - name: category
+      type: string
+    - name: flags
+      type: array
+      items: string
 
 action_space:
   type: discrete
   actions:
-    - approve
-    - reject
-    - flag
+    - name: approve
+      description: "Ad is legitimate — approve for display"
+    - name: reject
+      description: "Ad violates policy — remove immediately"
+    - name: flag
+      description: "Ad is borderline — escalate for human review"
+
+reward:
+  range: [0.0, 1.0]
   description: >
-    Content moderation decision for the advertisement.
+    1.0 for correct decision, scaled by severity.
+    Partial credit for FLAG on harmful content (0.4).
+    0.0 for approving a harmful ad (worst outcome).
+    Speed bonus of +0.05 per remaining step for fast correct decisions.
 
-endpoints:
-  health: /
-  reset:  /reset
-  step:   /step
-  state:  /state
-
-tasks:
-  - id: spam_detection
-    description: >
-      Detect and remove spam advertisements.
-    steps: 3
-    ideal_action: reject
-
-  - id: hate_speech_detection
-    description: >
-      Detect and remove hate speech content.
-    steps: 3
-    ideal_action: reject
-
-  - id: misinformation_detection
-    description: >
-      Detect false or misleading claims.
-    steps: 3
-    ideal_action: reject
-
-  - id: safe_content
-    description: >
-      Approve legitimate advertisements.
-    steps: 3
-    ideal_action: approve
-
-scoring:
-  reward_range: [0.0, 1.0]
-  success_threshold: 0.5
-  score_formula: mean(step_rewards)
-
-constraints:
-  max_runtime_seconds: 1200
-  max_memory_gb: 8
-  max_vcpu: 2
+server:
+  port: 8000
+  endpoints:
+    - POST /reset
+    - POST /step
+    - POST /state
+    - GET  /health
+    - GET  /tasks

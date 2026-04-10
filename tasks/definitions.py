@@ -1,124 +1,77 @@
-TASKS = {
-    "spam_detection": {
-        "description": "Detect and remove spam advertisements",
-        "ideal_action": "reject",
-        "steps": [
-            {
-                "observation": "Ad Content: '🔥 FREE $1000 Gift Card! Click to claim your reward now!' | Severity: Medium | Previous violations: 0",
-                "signals": {
-                    "has_spam_keywords": True,
-                    "severity": "medium",
-                    "ideal_action": "reject",
-                },
-            },
-            {
-                "observation": "Ad Content: 'ACT NOW! Limited time offer - 80% off!' | Severity: Low | Previous violations: 0",
-                "signals": {
-                    "has_spam_keywords": True,
-                    "severity": "low",
-                    "ideal_action": "reject",
-                },
-            },
-            {
-                "observation": "Ad Content: 'Check out our amazing products at great prices!' | Severity: None | Previous violations: 0",
-                "signals": {
-                    "has_spam_keywords": False,
-                    "severity": "none",
-                    "ideal_action": "approve",
-                },
-            },
-        ],
-    },
-    "hate_speech_detection": {
-        "description": "Detect and remove hate speech content",
-        "ideal_action": "reject",
-        "steps": [
-            {
-                "observation": "Ad Content: 'All [group] should be deported!' | Severity: High | Platform: Facebook",
-                "signals": {
-                    "has_hate_speech": True,
-                    "severity": "high",
-                    "ideal_action": "reject",
-                },
-            },
-            {
-                "observation": "Ad Content: 'Great deals on premium products!' | Severity: None | Platform: Instagram",
-                "signals": {
-                    "has_hate_speech": False,
-                    "severity": "none",
-                    "ideal_action": "approve",
-                },
-            },
-            {
-                "observation": "Ad Content: 'This product is amazing, buy now!' | Severity: None | Platform: Messenger",
-                "signals": {
-                    "has_hate_speech": False,
-                    "severity": "none",
-                    "ideal_action": "approve",
-                },
-            },
-        ],
-    },
-    "misinformation_detection": {
-        "description": "Detect false or misleading claims",
-        "ideal_action": "reject",
-        "steps": [
-            {
-                "observation": "Ad Content: 'BREAKING: New study shows vaccines cause autism - doctors hiding truth!' | Severity: High | Claim type: Health misinformation",
-                "signals": {
-                    "is_misinformation": True,
-                    "severity": "high",
-                    "ideal_action": "reject",
-                },
-            },
-            {
-                "observation": "Ad Content: 'Celebrating our 10th anniversary with special discounts!' | Severity: None | Claim type: None",
-                "signals": {
-                    "is_misinformation": False,
-                    "severity": "none",
-                    "ideal_action": "approve",
-                },
-            },
-            {
-                "observation": "Ad Content: 'Limited time offer on our products!' | Severity: Low | Claim type: Promotional",
-                "signals": {
-                    "is_misinformation": False,
-                    "severity": "low",
-                    "ideal_action": "approve",
-                },
-            },
-        ],
-    },
-    "safe_content": {
-        "description": "Approve legitimate advertisements",
-        "ideal_action": "approve",
-        "steps": [
-            {
-                "observation": "Ad Content: 'New collection now available at our store!' | Severity: None | Previous violations: 0",
-                "signals": {
-                    "is_safe": True,
-                    "severity": "none",
-                    "ideal_action": "approve",
-                },
-            },
-            {
-                "observation": "Ad Content: 'Join our newsletter for weekly tips' | Severity: None | Verified advertiser: Yes",
-                "signals": {
-                    "is_safe": True,
-                    "severity": "none",
-                    "ideal_action": "approve",
-                },
-            },
-            {
-                "observation": "Ad Content: 'Shop the sale - up to 50% off!' | Severity: Low | Previous violations: 0",
-                "signals": {
-                    "is_safe": True,
-                    "severity": "low",
-                    "ideal_action": "approve",
-                },
-            },
-        ],
-    },
-}
+"""
+tasks/definitions.py — Task definitions for the Ad Integrity environment
+"""
 
-TASK_NAMES = list(TASKS.keys())
+from dataclasses import dataclass, field
+from typing import List
+
+
+@dataclass
+class TaskDefinition:
+    task_id: str
+    description: str
+    difficulty: str          # "easy" | "medium" | "hard"
+    correct_action: str      # ground-truth for default scenario
+    reward_range: tuple = (0.0, 1.0)
+    tags: List[str] = field(default_factory=list)
+
+
+TASK_DEFINITIONS = [
+    TaskDefinition(
+        task_id="spam_detection",
+        description=(
+            "Identify spam advertisements including phishing, prize scams, "
+            "get-rich-quick schemes, and suspicious links. "
+            "Correct decision: REJECT."
+        ),
+        difficulty="easy",
+        correct_action="reject",
+        tags=["spam", "phishing", "fraud"],
+    ),
+    TaskDefinition(
+        task_id="hate_speech_detection",
+        description=(
+            "Detect advertisements containing hate speech, slurs, discrimination "
+            "based on ethnicity, religion, gender, or other protected characteristics. "
+            "Correct decision: REJECT."
+        ),
+        difficulty="medium",
+        correct_action="reject",
+        tags=["hate_speech", "discrimination", "safety"],
+    ),
+    TaskDefinition(
+        task_id="misinformation_detection",
+        description=(
+            "Identify ads promoting false medical claims, pseudoscience, "
+            "conspiracy theories, or dangerous health misinformation. "
+            "Correct decision: REJECT."
+        ),
+        difficulty="medium",
+        correct_action="reject",
+        tags=["misinformation", "health", "pseudoscience"],
+    ),
+    TaskDefinition(
+        task_id="safe_content",
+        description=(
+            "Approve legitimate, high-quality advertisements from real brands "
+            "that follow all community guidelines and contain no violations. "
+            "Correct decision: APPROVE."
+        ),
+        difficulty="easy",
+        correct_action="approve",
+        tags=["safe", "legitimate", "brand"],
+    ),
+    TaskDefinition(
+        task_id="multi_violation_detection",
+        description=(
+            "Detect complex ads that combine multiple policy violations — "
+            "e.g., hate speech + misinformation + spam. "
+            "Requires nuanced multi-signal reasoning. Correct decision: REJECT."
+        ),
+        difficulty="hard",
+        correct_action="reject",
+        tags=["multi_violation", "complex", "hard"],
+    ),
+]
+
+TASK_MAP = {t.task_id: t for t in TASK_DEFINITIONS}
