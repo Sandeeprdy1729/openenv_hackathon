@@ -21,9 +21,9 @@ WORKDIR /app/env
 # Sync dependencies (with or without uv.lock)
 RUN --mount=type=cache,target=/root/.cache/uv \
     if [ -f uv.lock ]; then \
-      uv sync --frozen --no-editable; \
+      uv sync --frozen --no-install-project --no-editable; \
     else \
-      uv sync --no-editable; \
+      uv sync --no-install-project --no-editable; \
     fi
 
 # ── Final image ────────────────────────────────────────────────────────────────
