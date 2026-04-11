@@ -1,7 +1,8 @@
 """
-tasks/graders.py — Reward grading for the Ad Integrity environment
+tasks/graders.py — Reward grading for the Ad Integrity environment.
 
-Each grader returns a float in [0.0, 1.0].
+All externally visible rewards and scores are kept strictly within (0, 1)
+so they pass OpenEnv's phase-2 validation checks after stdout formatting.
 """
 
 from typing import Dict
@@ -14,6 +15,13 @@ SEVERITY_MULTIPLIER: Dict[str, float] = {
     "critical": 1.3,
 }
 
+# Rewards are logged with 2 decimals, so keep them far enough from the bounds
+# that formatting can never turn them into 0.00 or 1.00.
+REWARD_EPS = 0.01
+
+# Episode scores are logged with 3 decimals.
+SCORE_EPS = 0.001
+
 
 def grade_action(
     agent_action: str,
@@ -23,7 +31,7 @@ def grade_action(
     max_steps: int = 3,
 ) -> float:
     """
-    Return a reward in [0.0, 1.0] based on how correct the agent's action is.
+    Return a reward strictly inside (0, 1) based on how correct the action is.
 
     Scoring philosophy:
       - Full credit for exact match, scaled by severity (critical violations matter more).
@@ -54,12 +62,14 @@ def grade_action(
         base = 0.1
         speed_bonus = 0.0
 
-    reward = min(1.0, base * mult + speed_bonus)
+    reward = max(REWARD_EPS, min(base * mult + speed_bonus, 1.0 - REWARD_EPS))
     return round(reward, 4)
 
 
 def grade_episode(rewards: list) -> float:
-    """Aggregate per-step rewards into a final episode score in [0.0, 1.0]."""
+    """Aggregate per-step rewards into a final episode score strictly in (0, 1)."""
     if not rewards:
-        return 0.0
-    return round(sum(rewards) / len(rewards), 4)
+        return round(SCORE_EPS, 4)
+    score = sum(rewards) / len(rewards)
+    score = max(SCORE_EPS, min(score, 1.0 - SCORE_EPS))
+    return round(score, 4)

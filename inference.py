@@ -20,9 +20,11 @@ import re
 import textwrap
 from typing import List, Optional
 
+from tasks.graders import grade_episode, REWARD_EPS
+
 # ── CRITICAL FIX: always use .get() with a default so no KeyError ──────────────
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
-MODEL_NAME   = os.getenv("MODEL_NAME",   "Qwen/Qwen2.5-72B-Instruct")
+MODEL_NAME   = os.getenv("MODEL_NAME",   "Qwen/Qwen2.5-3B-Instruct")
 API_KEY      = os.getenv("HF_TOKEN") or os.getenv("API_KEY", "dummy-key")
 ENV_BASE_URL = os.getenv("ENV_BASE_URL", "http://localhost:8000")
 
@@ -121,7 +123,7 @@ def run_task(client, task_name: str) -> None:
     import json
 
     history: List[str]  = []
-    rewards: List[float] = []
+    rewards: List[float]  = []
     steps_taken          = 0
     score                = 0.0
     success              = False
@@ -164,11 +166,11 @@ def run_task(client, task_name: str) -> None:
                     or step_resp.get("observation", {}).get("ad_content", "")
                     or obs_text
                 )
-                reward    = float(step_resp.get("reward", 0.0))
+                reward    = float(step_resp.get("reward", REWARD_EPS))
                 done      = bool(step_resp.get("done", False))
             except Exception as exc:
                 last_error = str(exc)
-                reward     = 0.0
+                reward     = REWARD_EPS
                 done       = True
 
             rewards.append(reward)
@@ -179,15 +181,14 @@ def run_task(client, task_name: str) -> None:
             if done:
                 break
 
-        score   = sum(rewards) / len(rewards) if rewards else 0.0
-        score   = max(0.0, min(score, 1.0))
+        score   = grade_episode(rewards)
         success = score >= SUCCESS_SCORE_THRESHOLD
 
     except Exception as exc:
         print(f"[DEBUG] Task {task_name} setup error: {exc}", flush=True)
         if not rewards:
-            rewards = [0.0]
-        score   = 0.0
+            rewards = [REWARD_EPS]
+        score   = grade_episode(rewards)
         success = False
 
     finally:

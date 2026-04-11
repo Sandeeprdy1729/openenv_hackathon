@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from tasks.graders import grade_action
 
 # ── In-memory episode state ────────────────────────────────────────────────────
 _state: Dict[str, Any] = {}
@@ -204,23 +205,13 @@ def create_app() -> FastAPI:
         severity       = ad["severity"]
         step_num       = _state["step"]
 
-        # ── Reward function: rich partial credit ────────────────────────────
-        severity_multiplier = {"low": 1.0, "medium": 1.1, "high": 1.2, "critical": 1.3}.get(severity, 1.0)
-
-        if action == correct_action:
-            base_reward = 1.0
-        elif action == "flag" and correct_action == "reject":
-            base_reward = 0.4   # partial credit — caught it, just not decisive enough
-        elif action == "flag" and correct_action == "approve":
-            base_reward = 0.5   # cautious but wrong direction
-        elif action == "approve" and correct_action == "reject":
-            base_reward = 0.0   # worst case — let harmful content through
-        else:
-            base_reward = 0.1
-
-        # Bonus for getting it right quickly
-        speed_bonus = max(0.0, (MAX_STEPS - step_num + 1) * 0.05) if action == correct_action else 0.0
-        reward      = min(1.0, base_reward * severity_multiplier + speed_bonus)
+        reward = grade_action(
+            agent_action=action,
+            correct_action=correct_action,
+            severity=severity,
+            step=step_num,
+            max_steps=MAX_STEPS,
+        )
 
         _state["history"].append(f"step={step_num} action={action} correct={correct_action} reward={reward:.2f}")
         _state["rewards"].append(reward)
