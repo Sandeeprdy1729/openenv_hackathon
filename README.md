@@ -53,16 +53,18 @@ The benchmark is intentionally designed to avoid trivial shortcutting:
 
 | Agent Decision | Correct Answer | Reward |
 |----------------|---------------|--------|
-| correct | correct | **1.0 × severity_multiplier** |
-| flag | reject | 0.4 (noticed problem, not decisive) |
-| flag | approve | 0.5 (overly cautious) |
-| reject | approve | 0.1 (over-censorship) |
-| approve | reject | **0.0** (worst — harmful content passes) |
+| exact `reject` on harmful content | `reject` | high reward, severity-weighted, capped below 1.0 |
+| exact `approve` on legitimate content | `approve` | high reward, slightly lower than severe rejects |
+| exact `flag` on ambiguous content | `flag` | solid reward for calibrated escalation |
+| `flag` on `reject` | `reject` | partial credit |
+| `reject` on `flag` | `flag` | partial credit |
+| `reject` on `approve` | `approve` | low reward for over-censorship |
+| `approve` on `reject` | `reject` | near-floor reward, worst-case miss |
 
-**Severity multipliers**: low=1.0, medium=1.1, high=1.2, critical=1.3  
-**Speed bonus**: +0.05 per remaining step for fast correct decisions
-
-All rewards clamped to **[0.0, 1.0]**.
+**Design notes**
+- Exact matches are rewarded differently for `approve`, `reject`, and `flag` so the benchmark can separate model behavior on ambiguous cases.
+- Adversarial cases apply a light penalty to partial-credit outcomes, which makes “flag everything” weaker than actual reasoning.
+- Episode scores are aggregated from step rewards and kept strictly inside `(0, 1)` to satisfy OpenEnv validation.
 
 ---
 
@@ -80,7 +82,7 @@ uvicorn server.app:app --host 0.0.0.0 --port 8000
 
 ---
 
-## 🤖 Running Inference
+## 🤖 Running Benchmark
 
 ```bash
 export API_BASE_URL="https://openrouter.ai/api/v1"
@@ -102,31 +104,56 @@ python inference.py
 
 ## 📊 Benchmark Multiple Models
 
-Use the benchmark runner to compare several models and generate a markdown table for this README:
+Use the benchmark runner to compare several models and generate a markdown report:
 
 ```bash
 export API_BASE_URL="https://openrouter.ai/api/v1"
 export API_KEY="your_openrouter_key"
 export ENV_BASE_URL="http://localhost:8000"
 
-python benchmark_models.py \
+python inference.py \
   --models \
   anthropic/claude-3.5-haiku \
   openai/gpt-4o-mini \
   google/gemma-2-9b-it \
+  --episodes 5 \
   --output-markdown benchmark_results.md
 ```
 
-The script prints a console summary and writes a markdown table you can paste into the README.
+The script prints a console summary and writes a markdown report you can reuse in the README.
 All model runs are logged in `benchmark_logs/` to keep evaluation transparent and reproducible across providers.
 
 ### Current Benchmark Results
 
-| Model | Avg Score | Success Rate | Task Scores |
-|------|-----------:|-------------:|------------|
-| `anthropic/claude-3.5-haiku` | 0.990 | 100% | spam_detection=0.990, hate_speech_detection=0.990, misinformation_detection=0.990, safe_content=0.990, multi_violation_detection=0.990 |
-| `openai/gpt-4o-mini` | 0.990 | 100% | spam_detection=0.990, hate_speech_detection=0.990, misinformation_detection=0.990, safe_content=0.990, multi_violation_detection=0.990 |
-| `google/gemma-2-9b-it` | 0.990 | 100% | spam_detection=0.990, hate_speech_detection=0.990, misinformation_detection=0.990, safe_content=0.990, multi_violation_detection=0.990 |
+| Rank | Model | Overall | Success Rate | Task Scores |
+|------|-------|--------:|-------------:|------------|
+| 1 | `anthropic/claude-3.5-haiku` | 0.829 | 100% | spam=0.876, hate=0.781, misinfo=0.838, safe=0.812, multi=0.835 |
+| 2 | `openai/gpt-4o-mini` | 0.815 | 100% | spam=0.837, hate=0.903, misinfo=0.737, safe=0.787, multi=0.813 |
+| 3 | `google/gemma-2-9b-it` | 0.628 | 40% | spam=0.533, hate=0.810, misinfo=0.700, safe=0.451, multi=0.647 |
+
+### Benchmark Highlights
+
+- `claude-3.5-haiku` ranked first overall with the most balanced performance across all 5 tasks.
+- `gpt-4o-mini` led on `hate_speech_detection` but trailed Claude on spam, misinformation, safe-content calibration, and multi-violation handling.
+- `gemma-2-9b-it` remained competitive on hate-speech and misinformation, but underperformed on spam and safe-content, dropping its task success rate to 2/5.
+- The current benchmark meaningfully separates model behavior on ambiguous `flag` cases and adversarial safe ads instead of collapsing everything to the same near-perfect score.
+
+
+
+
+### Adversarial Case Accuracy
+
+| Model | Spam | Hate Speech | Misinfo | Safe Content | Multi-Violation |
+|------|-----:|------------:|--------:|-------------:|----------------:|
+| `anthropic/claude-3.5-haiku` | 40% | 70% | 50% | 100% | 60% |
+| `openai/gpt-4o-mini` | 50% | 50% | 40% | 100% | 70% |
+| `google/gemma-2-9b-it` | 67% | 30% | 43% | 25% | 70% |
+
+### Result Notes
+
+- Success threshold is `avg >= 0.70` per task.
+- Scores are produced from 5 episodes per task using the current calibrated reward function.
+- Adversarial difficulty penalties apply only to partial-credit answers on tricky near-miss cases.
 
 ---
 
