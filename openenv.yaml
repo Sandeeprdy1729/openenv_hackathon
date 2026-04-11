@@ -46,14 +46,6 @@ observation_space:
     - name: ad_content
       type: string
       description: "Raw advertisement text being moderated"
-    - name: severity
-      type: string
-      enum: [low, medium, high, critical]
-    - name: category
-      type: string
-    - name: flags
-      type: array
-      items: string
 
 action_space:
   type: discrete

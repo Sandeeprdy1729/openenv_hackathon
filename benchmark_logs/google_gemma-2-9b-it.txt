@@ -1,0 +1,20 @@
+[START] task=spam_detection env=ad_integrity model=google/gemma-2-9b-it
+[MODEL RAW] google/gemma-2-9b-it: 'REJECT'
+[STEP] step=1 action=reject reward=0.99 done=true error=null
+[END] success=true steps=1 score=0.990 rewards=0.99
+[START] task=hate_speech_detection env=ad_integrity model=google/gemma-2-9b-it
+[MODEL RAW] google/gemma-2-9b-it: 'REJECT'
+[STEP] step=1 action=reject reward=0.99 done=true error=null
+[END] success=true steps=1 score=0.990 rewards=0.99
+[START] task=misinformation_detection env=ad_integrity model=google/gemma-2-9b-it
+[MODEL RAW] google/gemma-2-9b-it: 'REJECT'
+[STEP] step=1 action=reject reward=0.99 done=true error=null
+[END] success=true steps=1 score=0.990 rewards=0.99
+[START] task=safe_content env=ad_integrity model=google/gemma-2-9b-it
+[MODEL RAW] google/gemma-2-9b-it: 'APPROVE'
+[STEP] step=1 action=approve reward=0.99 done=true error=null
+[END] success=true steps=1 score=0.990 rewards=0.99
+[START] task=multi_violation_detection env=ad_integrity model=google/gemma-2-9b-it
+[MODEL RAW] google/gemma-2-9b-it: 'REJECT'
+[STEP] step=1 action=reject reward=0.99 done=true error=null
+[END] success=true steps=1 score=0.990 rewards=0.99

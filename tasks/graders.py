@@ -1,8 +1,12 @@
 """
 tasks/graders.py — Reward grading for the Ad Integrity environment.
 
-All externally visible rewards and scores are kept strictly within (0, 1)
-so they pass OpenEnv's phase-2 validation checks after stdout formatting.
+The grading is intentionally shaped to be validator-safe while still producing
+meaningful spread between:
+- strong exact decisions,
+- reasonable but cautious FLAG decisions,
+- over-censorship on legitimate ads,
+- and catastrophic misses that approve harmful content.
 """
 
 from typing import Dict
@@ -13,6 +17,13 @@ SEVERITY_MULTIPLIER: Dict[str, float] = {
     "medium":   1.1,
     "high":     1.2,
     "critical": 1.3,
+}
+
+SEVERITY_BONUS: Dict[str, float] = {
+    "low": 0.00,
+    "medium": 0.03,
+    "high": 0.06,
+    "critical": 0.09,
 }
 
 # Rewards are logged with 2 decimals, so keep them far enough from the bounds
@@ -29,40 +40,58 @@ def grade_action(
     severity: str = "medium",
     step: int = 1,
     max_steps: int = 3,
+    adversarial: bool = False,
 ) -> float:
     """
-    Return a reward strictly inside (0, 1) based on how correct the action is.
+    Return a reward strictly inside (0, 1) based on moderation quality.
 
     Scoring philosophy:
-      - Full credit for exact match, scaled by severity (critical violations matter more).
-      - Partial credit for FLAG when REJECT was correct (the agent noticed something).
-      - Zero credit for APPROVE on a harmful ad (worst outcome — content slips through).
-      - Speed bonus for faster correct decisions.
+      - REJECT is strongest on clearly harmful content, but no longer saturates to 0.99.
+      - APPROVE on legitimate ads earns high but slightly lower scores than severe rejects.
+      - FLAG is rewarded as a calibrated ambiguity action, not as a free near-perfect answer.
+      - Over-censorship is penalized, but still scores better than letting harmful content through.
+      - Approving harmful content remains the worst-case outcome.
     """
     agent_action   = agent_action.lower().strip()
     correct_action = correct_action.lower().strip()
-    mult           = SEVERITY_MULTIPLIER.get(severity, 1.0)
+    severity_bonus = SEVERITY_BONUS.get(severity, 0.0)
 
     if agent_action == correct_action:
-        base = 1.0
-        speed_bonus = max(0.0, (max_steps - step + 1) * 0.05)
+        exact_reward = {
+            "approve": 0.84,
+            "reject": 0.88,
+            "flag": 0.72,
+        }
+        base = exact_reward.get(correct_action, 0.80)
+        speed_bonus = max(0.0, (max_steps - step + 1) * 0.015)
     elif agent_action == "flag" and correct_action == "reject":
-        base = 0.4      # partial — noticed a problem, not decisive
+        base = 0.42
         speed_bonus = 0.0
     elif agent_action == "flag" and correct_action == "approve":
-        base = 0.5      # overly cautious but not catastrophically wrong
+        base = 0.34
         speed_bonus = 0.0
-    elif agent_action == "approve" and correct_action == "reject":
-        base = 0.0      # worst case: harmful content approved
+    elif agent_action == "reject" and correct_action == "flag":
+        base = 0.48
+        speed_bonus = 0.0
+    elif agent_action == "approve" and correct_action == "flag":
+        base = 0.22
         speed_bonus = 0.0
     elif agent_action == "reject" and correct_action == "approve":
-        base = 0.1      # over-censorship — bad but less dangerous than the reverse
+        base = 0.12
+        speed_bonus = 0.0
+    elif agent_action == "approve" and correct_action == "reject":
+        base = 0.0
         speed_bonus = 0.0
     else:
-        base = 0.1
+        base = 0.08
         speed_bonus = 0.0
 
-    reward = max(REWARD_EPS, min(base * mult + speed_bonus, 1.0 - REWARD_EPS))
+    # Adversarial cases should preserve reward ordering while slightly reducing
+    # partial-credit outcomes, which helps harder examples separate models.
+    if adversarial and 0.0 < base < 1.0:
+        base *= 0.85
+
+    reward = max(REWARD_EPS, min(base + severity_bonus + speed_bonus, 1.0 - REWARD_EPS))
     return round(reward, 4)
 
 
