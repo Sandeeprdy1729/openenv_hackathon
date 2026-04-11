@@ -131,6 +131,9 @@ All model runs are logged in `benchmark_logs/` to keep evaluation transparent an
 | 2 | `openai/gpt-4o-mini` | 0.815 | 100% | spam=0.837, hate=0.903, misinfo=0.737, safe=0.787, multi=0.813 |
 | 3 | `google/gemma-2-9b-it` | 0.628 | 40% | spam=0.533, hate=0.810, misinfo=0.700, safe=0.451, multi=0.647 |
 
+<img width="1440" height="2898" alt="image" src="https://github.com/user-attachments/assets/7ff5d082-18e0-4b27-996b-0979f327acb5" />
+
+
 ### Benchmark Highlights
 
 - `claude-3.5-haiku` ranked first overall with the most balanced performance across all 5 tasks.
