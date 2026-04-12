@@ -2,19 +2,12 @@
 server/app.py — FastAPI server for the MetaGuard OpenEnv environment.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from server.ad_moderation_environment import AdModerationEnvironment
 
-
-# ---------------------------------------------------------------------------
-# Request / response schemas
-# ---------------------------------------------------------------------------
-
-class ResetRequest(BaseModel):
-    task_id: Optional[str] = "spam_detection"
 
 class StepRequest(BaseModel):
     action: str
@@ -24,10 +17,6 @@ class HealthResponse(BaseModel):
     environment: str
     version: str
 
-
-# ---------------------------------------------------------------------------
-# App factory (used by openenv validate)
-# ---------------------------------------------------------------------------
 
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -62,10 +51,21 @@ def create_app() -> FastAPI:
         }
 
     @app.post("/reset")
-    async def reset(req: ResetRequest):
+    async def reset(request: Request):
+        """
+        Accept POST /reset with ANY body — empty, {}, or {"task_id": "..."}.
+        OpenEnv Phase 1 sends an empty body; we must not reject that.
+        """
         try:
-            obs = env.reset(req.task_id or "spam_detection")
-            return {"observation": obs, "task_id": req.task_id}
+            body = await request.json()
+        except Exception:
+            body = {}
+
+        task_id = (body or {}).get("task_id", "spam_detection") or "spam_detection"
+
+        try:
+            obs = env.reset(task_id)
+            return {"observation": obs, "task_id": task_id}
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
 
@@ -87,10 +87,6 @@ def create_app() -> FastAPI:
 
 app = create_app()
 
-
-# ---------------------------------------------------------------------------
-# Entry point (required by openenv validate)
-# ---------------------------------------------------------------------------
 
 def main():
     import uvicorn
