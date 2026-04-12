@@ -82,6 +82,12 @@ def create_app() -> FastAPI:
     async def state():
         return env.get_state()
 
+    @app.get("/")
+    async def root():
+        return {
+        "status": "ok",
+        "message": "MetaGuard OpenEnv is running"
+        }
     return app
 
 
